@@ -151,7 +151,18 @@ class cf_alg:
         if denominator == 0:
             return 0
         return numerator/denominator
-
+    def predict_gs(self, user_id, movie_id):
+        numerator = 0
+        denominator = 0
+        inf_sign = self.inf_sign_list[user_id]
+        for i in self.kn_list[user_id]:
+            if self.user_movie_matrix[int(i)][movie_id]==0:
+                continue
+            numerator+=self.user_movie_matrix[int(i)][movie_id]*(self.user_similarity_matrix[user_id][int(i)]+min(0,inf_sign*self.inf_sign_list[int(i)]*self.influence))
+            denominator+=self.user_similarity_matrix[user_id][int(i)]
+        if denominator == 0:
+            return 0
+        return numerator/denominator
     # creating data structures that will be used in the score function
     def raw_cf_fit(self, k_num):
         # Constructing user-item matrix
@@ -179,6 +190,27 @@ class cf_alg:
                 self.user_similarity_matrix[i][j] = sim
             self.kn_list = np.vstack(
                 (self.kn_list, np.array(temkn_list.toArray())))
+    def gs_fit(self, k_num, influence, threshold,sim_threshold):
+        self.raw_cf_fit(k_num)
+        self.inf_sign_list = np.zeros(self.max_user_id+1)
+        self.influence = influence
+        self.sim_threshold = sim_threshold
+        self.threshold = threshold
+        sim_order = knn_lis(self.max_user_id+1)
+        for idx,sim_row in enumerate(self.user_similarity_matrix):
+            count = 0
+            for sim in sim_row:
+                if sim > self.sim_threshold:
+                    count+=1
+            sim_order.append(idx, count)
+        sim_order_list = sim_order.toArray()
+
+        for gs_idx in range(0,(int)(self.max_user_id*self.threshold)):
+            self.inf_sign_list[sim_order_list[gs_idx]] = -1
+        for non_gs_idx in range((int)(self.max_user_id*self.threshold),self.max_user_id+1):
+            self.inf_sign_list[sim_order_list[non_gs_idx]] = 1
+        
+
 
     # Function which provides different kind of measurement
     def score(self, prediction_function, measure_num):
@@ -212,6 +244,10 @@ def main():
     cf_predictor = cf_alg(data)
     cf_predictor.raw_cf_fit(5)
     cf_predictor.score(cf_predictor.predict_sim, 1)
+    cf_predictor.score(cf_predictor.predict_sim, 0)
+    cf_predictor.gs_fit(5,0.3,0.2,0.5)
+    cf_predictor.score(cf_predictor.predict_gs,1)
+    cf_predictor.score(cf_predictor.predict_gs,0)
 
 
 if __name__ == '__main__':
